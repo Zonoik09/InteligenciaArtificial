@@ -13,6 +13,7 @@ module com.jonathan.jonagpt {
     requires annotations;
     requires java.net.http;
     requires org.json;
+    requires java.desktop;
 
     opens com.jonathan.jonagpt to javafx.fxml;
     exports com.jonathan.jonagpt;
