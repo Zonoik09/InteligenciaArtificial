@@ -10,6 +10,7 @@ public class ControllerMesYou {
 
     public String establecerTexto(String text) {
         Text message = new Text(text);
+        message.wrappingWidthProperty().bind(Area.widthProperty());
         Area.getChildren().add(message);
         return text;
     }

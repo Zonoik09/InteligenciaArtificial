@@ -10,6 +10,8 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyCode;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -50,6 +52,8 @@ public class Controller {
     @FXML
     public ScrollPane scroll;
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    @FXML
+    public ImageView image;
     private CompletableFuture<HttpResponse<InputStream>> streamRequest;
     private CompletableFuture<HttpResponse<String>> completeRequest;
     private AtomicBoolean isCancelled = new AtomicBoolean(false);
@@ -61,10 +65,14 @@ public class Controller {
 
 
 
-
     @FXML
     public void initialize() {
         scroll.setFitToWidth(true);
+        texto.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                enviarMensaje();
+            }
+        });
     }
 
     // Envia el mensaje y se muestra en la interfaz
@@ -103,7 +111,7 @@ public class Controller {
 
         Stage stage = (Stage) media.getScene().getWindow();
         File selectedFile = fileChooser.showOpenDialog(stage);
-
+        image.setImage(new Image(selectedFile.toURI().toString()));
         if (selectedFile != null) {
             try {
                 // Read the image file
@@ -121,19 +129,70 @@ public class Controller {
                 // Encode to Base64
                 String base64Image = Base64.getEncoder().encodeToString(imageBytes);
 
-//                // Set the image in the ImageView
-//                Image image = new Image(selectedFile.toURI().toString());
-//                img.setImage(image);
-//
-//                // Set the Base64 string in the TextArea (was previously a Text element)
-//                txt.setText(base64Image);
+                sendMessageWithImage("Describe la siguiente imagen:",base64Image);
 
                 outputStream.close();
-            } catch (IOException e) {
+            } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
         }
     }
+
+    @FXML
+    private void callComplete(ActionEvent event) {
+        isCancelled.set(false);
+
+
+    }
+
+    public void sendMessageWithImage(String userMessage, String base64Image) throws IOException, InterruptedException {
+        HttpClient client = HttpClient.newHttpClient();
+        String requestBody = String.format("{\"model\": \"llava-phi3\", \"prompt\": \"%s\", \"images\": [\"%s\"]}", userMessage, base64Image);
+
+        Platform.runLater(() -> texto.setText("Wait complete ..."));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:11434/api/generate"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        Platform.runLater(() -> {
+            try {
+                // Obtener la respuesta como texto
+                String responseBody = response.body();
+
+                // Aquí, puedes analizar la respuesta si es un JSON
+                // Por ejemplo, si necesitas extraer un campo específico, usa JSONObject
+                // JSONObject jsonResponse = new JSONObject(responseBody);
+                // String resultText = jsonResponse.getString("response");
+
+                if (isFirst) {
+                    FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(getClass().getResource("/Layout_message_chat.fxml")));
+                    Node layout3 = loader.load();
+                    ControllerMesChat controllerMesChat = loader.getController();
+                    box.getChildren().add(layout3);
+                    layoutControllerMap.put(layout3, controllerMesChat);
+                    controllerMesChat.addText(responseBody);
+                    isFirst = false;
+                } else {
+                    Node lastLayout = box.getChildren().get(box.getChildren().size() - 1);
+                    ControllerMesChat controllerMesChat = layoutControllerMap.get(lastLayout);
+                    if (controllerMesChat != null) {
+                        controllerMesChat.addText(responseBody);
+                    }
+                }
+                scroll.setVvalue(1.0);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+
+
 
     // Limpia la pantalla
     public void clearScreen(ActionEvent actionEvent) {
@@ -142,6 +201,7 @@ public class Controller {
 
     @FXML
     public void sendMessageToOllama(String userMessage) throws IOException, InterruptedException {
+        isFirst = true;
         HttpClient client = HttpClient.newHttpClient();
         String requestBody = String.format("{\"model\": \"llama3.2:1b\", \"prompt\": \"%s\", \"stream\": true}", userMessage);
 
@@ -154,42 +214,30 @@ public class Controller {
         client.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
                 .thenApply(HttpResponse::body)
                 .thenAccept(inputStream -> {
-                    StringBuilder completeResponse = new StringBuilder(); 
-
                     try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
                             JSONObject jsonResponse = new JSONObject(line);
                             String responseText = jsonResponse.getString("response");
 
-                            completeResponse.append(responseText);
-
                             Platform.runLater(() -> {
                                 try {
                                     if (isFirst) {
-                                        // La primera vez, creamos y cargamos el layout
                                         FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(getClass().getResource("/Layout_message_chat.fxml")));
                                         Node layout3 = loader.load();
                                         ControllerMesChat controllerMesChat = loader.getController();
                                         box.getChildren().add(layout3);
                                         layoutControllerMap.put(layout3, controllerMesChat);
-                                        controllerMesChat.addText(completeResponse.toString());
+                                        controllerMesChat.addText(responseText);
                                         isFirst = false;
                                     } else {
-                                        // Obtenemos el último layout añadido
                                         Node lastLayout = box.getChildren().get(box.getChildren().size() - 1);
-
-                                        // Buscamos el controlador en el mapa
                                         ControllerMesChat controllerMesChat = layoutControllerMap.get(lastLayout);
-
                                         if (controllerMesChat != null) {
-                                            // Añadimos el texto acumulado al layout existente
-                                            controllerMesChat.addText(completeResponse.toString());
+                                            controllerMesChat.addText(responseText);
                                         }
                                     }
-
-                                    // Asegurarnos de que el scroll baje al último mensaje
-                                    scroll.layout();
+                                    scroll.setVvalue(1.0);
                                 } catch (IOException e) {
                                     e.printStackTrace();
                                 }
@@ -204,6 +252,7 @@ public class Controller {
                     return null;
                 });
     }
+
 
 
 

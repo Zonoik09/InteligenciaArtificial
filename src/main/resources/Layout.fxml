@@ -4,6 +4,7 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
@@ -20,9 +21,18 @@
          <children>
             <AnchorPane prefHeight="262.0" prefWidth="178.0">
                <children>
-                  <Button fx:id="submit0" layoutX="29.0" layoutY="22.0" mnemonicParsing="false" onAction="#enviarMensaje" prefHeight="48.0" prefWidth="121.0" style="-fx-background-color: Transparent; -fx-border-color: black; -fx-border-radius: 5px;" text="SUBMIT" />
-                  <Button fx:id="cancel" layoutX="29.0" layoutY="106.0" mnemonicParsing="false" prefHeight="48.0" prefWidth="121.0" style="-fx-background-color: transparent; -fx-border-color: black; -fx-border-radius: 5px;" text="CANCEL" />
-                  <Button fx:id="clear" layoutX="29.0" layoutY="183.0" mnemonicParsing="false" onAction="#clearScreen" prefHeight="48.0" prefWidth="121.0" style="-fx-background-color: transparent; -fx-border-radius: 5px; -fx-border-color: black;" text="CLEAR" />
+                  <Button fx:id="submit0" layoutX="29.0" layoutY="22.0" mnemonicParsing="false" onAction="#enviarMensaje" prefHeight="48.0" prefWidth="121.0" style="-fx-background-color: Transparent; -fx-border-color: black; -fx-border-radius: 5px;" text="SUBMIT">
+                     <cursor>
+                        <Cursor fx:constant="HAND" />
+                     </cursor></Button>
+                  <Button fx:id="cancel" layoutX="29.0" layoutY="106.0" mnemonicParsing="false" prefHeight="48.0" prefWidth="121.0" style="-fx-background-color: transparent; -fx-border-color: black; -fx-border-radius: 5px;" text="CANCEL">
+                     <cursor>
+                        <Cursor fx:constant="HAND" />
+                     </cursor></Button>
+                  <Button fx:id="clear" layoutX="29.0" layoutY="183.0" mnemonicParsing="false" onAction="#clearScreen" prefHeight="48.0" prefWidth="121.0" style="-fx-background-color: transparent; -fx-border-radius: 5px; -fx-border-color: black;" text="CLEAR">
+                     <cursor>
+                        <Cursor fx:constant="HAND" />
+                     </cursor></Button>
                </children>
             </AnchorPane>
          </children>
@@ -43,7 +53,10 @@
             </AnchorPane>
             <ScrollPane prefHeight="44.0" prefWidth="853.0" style="-fx-background-color: transparent;">
                <content>
-                  <TextField fx:id="texto" prefHeight="41.0" prefWidth="688.0" promptText="Message ZonoGPT..." style="-fx-background-color: transparent;" />
+                  <TextField fx:id="texto" prefHeight="41.0" prefWidth="688.0" promptText="Message ZonoGPT..." style="-fx-background-color: transparent;">
+                     <cursor>
+                        <Cursor fx:constant="TEXT" />
+                     </cursor></TextField>
                </content>
             </ScrollPane>
             <AnchorPane prefHeight="200.0" prefWidth="200.0">
@@ -52,10 +65,14 @@
                      <font>
                         <Font name="System Bold" size="18.0" />
                      </font>
+                     <cursor>
+                        <Cursor fx:constant="HAND" />
+                     </cursor>
                   </Button>
                </children>
             </AnchorPane>
          </children>
       </HBox>
+      <ImageView fx:id="image" fitHeight="150.0" fitWidth="180.0" layoutX="806.0" layoutY="290.0" pickOnBounds="true" preserveRatio="true" />
    </children>
 </AnchorPane>
