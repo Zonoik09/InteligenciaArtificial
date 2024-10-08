@@ -54,7 +54,7 @@ public class Controller {
     private final HttpClient httpClient = HttpClient.newHttpClient();
     @FXML
     public ImageView image;
-    private CompletableFuture<HttpResponse<InputStream>> streamRequest;
+    private CompletableFuture<Void> streamRequest;
     private CompletableFuture<HttpResponse<String>> completeRequest;
     private AtomicBoolean isCancelled = new AtomicBoolean(false);
     private InputStream currentInputStream;
@@ -101,6 +101,7 @@ public class Controller {
         }
 
         texto.clear();
+        isCancelled.set(false);
     }
 
     // Esto es para cargar la imagen
@@ -144,6 +145,8 @@ public class Controller {
     }
 
     public void sendMessageWithImage(String userMessage, String base64Image) {
+        isCancelled.set(false);
+
         HttpClient client = HttpClient.newHttpClient();
         String requestBody = String.format("{\"model\": \"llava-phi3\", \"prompt\": \"%s\", \"images\": [\"%s\"]}", userMessage, base64Image);
 
@@ -154,70 +157,85 @@ public class Controller {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 
-        client.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
+        streamRequest = client.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
                 .thenApply(HttpResponse::body)
                 .thenAccept(inputStream -> {
-                    StringBuilder responseContent = new StringBuilder();
+                    currentInputStream = inputStream;
 
-                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
-                        String line;
-
-                        while ((line = reader.readLine()) != null) {
-                            responseContent.append(line);
-                        }
-
-                        // Aquí separas los fragmentos de la respuesta
-                        String[] responses = responseContent.toString().split("\\}\\{");
-                        boolean isComplete = false;
-                        StringBuilder finalResponse = new StringBuilder();
-
-                        for (String response : responses) {
-                            // Asegúrate de corregir el formato JSON si es necesario
-                            String jsonString = response.trim();
-                            if (!jsonString.startsWith("{")) {
-                                jsonString = "{" + jsonString;
-                            }
-                            if (!jsonString.endsWith("}")) {
-                                jsonString = jsonString + "}";
-                            }
-
-                            JSONObject jsonResponse = new JSONObject(jsonString);
-                            finalResponse.append(jsonResponse.getString("response"));
-
-                            if (jsonResponse.getBoolean("done")) {
-                                isComplete = true;
-                            }
-                        }
-
-
-                        if (isComplete) {
-                            Platform.runLater(() -> {
-                                try {
-                                    FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(getClass().getResource("/Layout_message_chat.fxml")));
-                                    Node layout4 = loader.load();
-                                    ControllerMesChat controllerMesChat = loader.getController();
-                                    box.getChildren().add(layout4);
-                                    layoutControllerMap.put(layout4, controllerMesChat);
-                                    controllerMesChat.addText(finalResponse.toString());
-                                    scroll.setVvalue(1.0);
-                                    texto.setText("Completed");
-
-                                } catch (IOException e) {
-                                    e.printStackTrace();
+                    streamReadingTask = executorService.submit(() -> {
+                        StringBuilder responseContent = new StringBuilder();
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                if (isCancelled.get()) {
+                                    break;
                                 }
-                            });
-                        } else {
-                            Platform.runLater(() -> texto.setText("Response not complete yet."));
-                        }
+                                responseContent.append(line);
+                            }
 
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        Platform.runLater(() -> texto.setText("Error during processing"));
-                    }
+                            // Aquí se separa los fragmentos de la respuesta
+                            String[] responses = responseContent.toString().split("\\}\\{");
+                            boolean isComplete = false;
+                            StringBuilder finalResponse = new StringBuilder();
+
+                            for (String response : responses) {
+                                if (isCancelled.get()) {
+                                    break;
+                                }
+                                String jsonString = response.trim();
+                                if (!jsonString.startsWith("{")) {
+                                    jsonString = "{" + jsonString;
+                                }
+                                if (!jsonString.endsWith("}")) {
+                                    jsonString = jsonString + "}";
+                                }
+
+                                JSONObject jsonResponse = new JSONObject(jsonString);
+                                finalResponse.append(jsonResponse.getString("response"));
+
+                                if (jsonResponse.getBoolean("done")) {
+                                    isComplete = true;
+                                }
+                            }
+
+                            if (!isCancelled.get() && isComplete) { // Verifica que no esté cancelado antes de actualizar la UI
+                                Platform.runLater(() -> {
+                                    try {
+                                        FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(getClass().getResource("/Layout_message_chat.fxml")));
+                                        Node layout4 = loader.load();
+                                        ControllerMesChat controllerMesChat = loader.getController();
+                                        box.getChildren().add(layout4);
+                                        layoutControllerMap.put(layout4, controllerMesChat);
+                                        controllerMesChat.addText(finalResponse.toString());
+                                        scroll.setVvalue(1.0);
+                                        texto.setText("Completed");
+
+                                    } catch (IOException e) {
+                                        e.printStackTrace();
+                                    }
+                                });
+                            } else if (isCancelled.get()) {
+                                Platform.runLater(() -> texto.setText("Request was cancelled."));
+                            } else {
+                                Platform.runLater(() -> texto.setText("Response not complete yet."));
+                            }
+                        } catch (IOException e) {
+                            if (isCancelled.get()) {
+                                Platform.runLater(() -> texto.setText("Request was cancelled"));
+                            } else {
+                                e.printStackTrace();
+                                Platform.runLater(() -> texto.setText("Error during processing"));
+                            }
+                        }
+                    });
                 })
                 .exceptionally(ex -> {
-                    ex.printStackTrace();
-                    Platform.runLater(() -> texto.setText("Error during request: " + ex.getMessage()));
+                    if (ex.getCause() instanceof java.util.concurrent.CancellationException) {
+                        Platform.runLater(() -> texto.setText("Request was cancelled"));
+                    } else {
+                        ex.printStackTrace();
+                        Platform.runLater(() -> texto.setText("Error during request: " + ex.getMessage()));
+                    }
                     return null;
                 });
     }
@@ -246,6 +264,9 @@ public class Controller {
                     try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
+                            if (isCancelled.get()) {
+                                break;
+                            }
                             JSONObject jsonResponse = new JSONObject(line);
                             String responseText = jsonResponse.getString("response");
 
@@ -282,12 +303,24 @@ public class Controller {
                 });
     }
 
+    @FXML
+    public void cancelRequest() {
+        isCancelled.set(true);
+        if (streamRequest != null && !streamRequest.isDone()) {
+            streamRequest.cancel(true);
+        }
+        if (completeRequest != null && !completeRequest.isDone()) {
+            completeRequest.cancel(true);
+        }
+        if (streamReadingTask != null && !streamReadingTask.isDone()) {
+            streamReadingTask.cancel(true);
+        }
+        Platform.runLater(() -> texto.setText("Request cancelled"));
+    }
 
 
-
-
-
-
-
-
+    public void cleanImage(ActionEvent actionEvent) {
+        image.setVisible(false);
+        base64Image = null;
+    }
 }

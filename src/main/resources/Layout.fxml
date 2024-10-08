@@ -21,11 +21,11 @@
          <children>
             <AnchorPane prefHeight="262.0" prefWidth="178.0">
                <children>
-                  <Button fx:id="submit0" layoutX="29.0" layoutY="22.0" mnemonicParsing="false" onAction="#enviarMensaje" prefHeight="48.0" prefWidth="121.0" style="-fx-background-color: Transparent; -fx-border-color: black; -fx-border-radius: 5px;" text="SUBMIT">
+                  <Button fx:id="submit0" layoutX="29.0" layoutY="22.0" mnemonicParsing="false" onAction="#cleanImage" prefHeight="48.0" prefWidth="121.0" style="-fx-background-color: Transparent; -fx-border-color: black; -fx-border-radius: 5px;" text="CLEAR IMAGE">
                      <cursor>
                         <Cursor fx:constant="HAND" />
                      </cursor></Button>
-                  <Button fx:id="cancel" layoutX="29.0" layoutY="106.0" mnemonicParsing="false" prefHeight="48.0" prefWidth="121.0" style="-fx-background-color: transparent; -fx-border-color: black; -fx-border-radius: 5px;" text="CANCEL">
+                  <Button fx:id="cancel" layoutX="29.0" layoutY="106.0" mnemonicParsing="false" onAction="#cancelRequest" prefHeight="48.0" prefWidth="121.0" style="-fx-background-color: transparent; -fx-border-color: black; -fx-border-radius: 5px;" text="CANCEL">
                      <cursor>
                         <Cursor fx:constant="HAND" />
                      </cursor></Button>

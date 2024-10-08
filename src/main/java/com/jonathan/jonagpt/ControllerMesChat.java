@@ -20,10 +20,19 @@ public class ControllerMesChat {
         }
         // Crear y añadirlo al TextFlow
         Text message = new Text(text);
+        int num = 0;
+        num = text.length();
         Area.getChildren().add(message);
-        borderPane.setPrefHeight(Area.getHeight() + labelGPT.getHeight() + labelGPT.getHeight());
+        setHeight(num,Area.getHeight());
         System.out.println(borderPane.getHeight());
 
+    }
+
+    public void setHeight(int num,double height) {
+        borderPane.setPrefHeight(Area.getHeight() + labelGPT.getHeight() + labelGPT.getHeight());
+        if (height == 0) {
+            borderPane.setPrefHeight((num/3)+5);
+        }
     }
 
 }
