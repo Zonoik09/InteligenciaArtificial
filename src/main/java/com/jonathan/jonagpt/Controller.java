@@ -62,7 +62,7 @@ public class Controller {
     private Future<?> streamReadingTask;
     private boolean isFirst = true;
     private Map<Node, ControllerMesChat> layoutControllerMap = new HashMap<>();
-
+    private String base64Image;
 
 
     @FXML
@@ -70,7 +70,9 @@ public class Controller {
         scroll.setFitToWidth(true);
         texto.setOnKeyPressed(event -> {
             if (event.getCode() == KeyCode.ENTER) {
-                enviarMensaje();
+                if (!texto.getText().trim().isEmpty()) {
+                    enviarMensaje();
+                }
             }
         });
     }
@@ -85,7 +87,11 @@ public class Controller {
             ControllerMesYou controllerMesYou = loader.getController();
             controllerMesYou.establecerTexto(texto.getText());
             box.getChildren().add(layout2);
-            sendMessageToOllama(texto.getText());
+            if (base64Image != null) {
+                sendMessageWithImage(texto.getText(), base64Image);
+            } else {
+                sendMessageToOllama(texto.getText());
+            }
             scroll.layout();
             scroll.setVvalue(1.0);
         } catch (IOException e) {
@@ -111,8 +117,9 @@ public class Controller {
 
         Stage stage = (Stage) media.getScene().getWindow();
         File selectedFile = fileChooser.showOpenDialog(stage);
-        image.setImage(new Image(selectedFile.toURI().toString()));
         if (selectedFile != null) {
+            image.setVisible(true);
+            image.setImage(new Image(selectedFile.toURI().toString()));
             try {
                 // Read the image file
                 BufferedImage bufferedImage = ImageIO.read(selectedFile);
@@ -127,75 +134,97 @@ public class Controller {
                 byte[] imageBytes = outputStream.toByteArray();
 
                 // Encode to Base64
-                String base64Image = Base64.getEncoder().encodeToString(imageBytes);
-
-                sendMessageWithImage("Describe la siguiente imagen:",base64Image);
+                base64Image = Base64.getEncoder().encodeToString(imageBytes);
 
                 outputStream.close();
-            } catch (IOException | InterruptedException e) {
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
 
-    @FXML
-    private void callComplete(ActionEvent event) {
-        isCancelled.set(false);
-
-
-    }
-
-    public void sendMessageWithImage(String userMessage, String base64Image) throws IOException, InterruptedException {
+    public void sendMessageWithImage(String userMessage, String base64Image) {
         HttpClient client = HttpClient.newHttpClient();
         String requestBody = String.format("{\"model\": \"llava-phi3\", \"prompt\": \"%s\", \"images\": [\"%s\"]}", userMessage, base64Image);
 
-        Platform.runLater(() -> texto.setText("Wait complete ..."));
-
+        Platform.runLater(() -> texto.setText("Processing..."));
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:11434/api/generate"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        client.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
+                .thenApply(HttpResponse::body)
+                .thenAccept(inputStream -> {
+                    StringBuilder responseContent = new StringBuilder();
 
-        Platform.runLater(() -> {
-            try {
-                // Obtener la respuesta como texto
-                String responseBody = response.body();
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+                        String line;
 
-                // Aquí, puedes analizar la respuesta si es un JSON
-                // Por ejemplo, si necesitas extraer un campo específico, usa JSONObject
-                // JSONObject jsonResponse = new JSONObject(responseBody);
-                // String resultText = jsonResponse.getString("response");
+                        while ((line = reader.readLine()) != null) {
+                            responseContent.append(line);
+                        }
 
-                if (isFirst) {
-                    FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(getClass().getResource("/Layout_message_chat.fxml")));
-                    Node layout3 = loader.load();
-                    ControllerMesChat controllerMesChat = loader.getController();
-                    box.getChildren().add(layout3);
-                    layoutControllerMap.put(layout3, controllerMesChat);
-                    controllerMesChat.addText(responseBody);
-                    isFirst = false;
-                } else {
-                    Node lastLayout = box.getChildren().get(box.getChildren().size() - 1);
-                    ControllerMesChat controllerMesChat = layoutControllerMap.get(lastLayout);
-                    if (controllerMesChat != null) {
-                        controllerMesChat.addText(responseBody);
+                        // Aquí separas los fragmentos de la respuesta
+                        String[] responses = responseContent.toString().split("\\}\\{");
+                        boolean isComplete = false;
+                        StringBuilder finalResponse = new StringBuilder();
+
+                        for (String response : responses) {
+                            // Asegúrate de corregir el formato JSON si es necesario
+                            String jsonString = response.trim();
+                            if (!jsonString.startsWith("{")) {
+                                jsonString = "{" + jsonString;
+                            }
+                            if (!jsonString.endsWith("}")) {
+                                jsonString = jsonString + "}";
+                            }
+
+                            JSONObject jsonResponse = new JSONObject(jsonString);
+                            finalResponse.append(jsonResponse.getString("response"));
+
+                            if (jsonResponse.getBoolean("done")) {
+                                isComplete = true;
+                            }
+                        }
+
+
+                        if (isComplete) {
+                            Platform.runLater(() -> {
+                                try {
+                                    FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(getClass().getResource("/Layout_message_chat.fxml")));
+                                    Node layout4 = loader.load();
+                                    ControllerMesChat controllerMesChat = loader.getController();
+                                    box.getChildren().add(layout4);
+                                    layoutControllerMap.put(layout4, controllerMesChat);
+                                    controllerMesChat.addText(finalResponse.toString());
+                                    scroll.setVvalue(1.0);
+                                    texto.setText("Completed");
+
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            });
+                        } else {
+                            Platform.runLater(() -> texto.setText("Response not complete yet."));
+                        }
+
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        Platform.runLater(() -> texto.setText("Error during processing"));
                     }
-                }
-                scroll.setVvalue(1.0);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
+                })
+                .exceptionally(ex -> {
+                    ex.printStackTrace();
+                    Platform.runLater(() -> texto.setText("Error during request: " + ex.getMessage()));
+                    return null;
+                });
     }
 
-
-
-
-    // Limpia la pantalla
     public void clearScreen(ActionEvent actionEvent) {
+        base64Image = null;
+        image.setVisible(false);
         box.getChildren().clear();
     }
 

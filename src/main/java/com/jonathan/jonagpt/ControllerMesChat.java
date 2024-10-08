@@ -18,12 +18,12 @@ public class ControllerMesChat {
             System.out.println("El TextFlow no está iniciado.");
             return;
         }
-
         // Crear y añadirlo al TextFlow
         Text message = new Text(text);
         Area.getChildren().add(message);
-
         borderPane.setPrefHeight(Area.getHeight() + labelGPT.getHeight() + labelGPT.getHeight());
+        System.out.println(borderPane.getHeight());
+
     }
 
 }
